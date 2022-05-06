@@ -85,6 +85,7 @@
 
 #include "ROMManager.h"
 #include "ArchiveUtil.h"
+#include "DSi_NAND.h"
 
 // TODO: uniform variable spelling
 
@@ -1959,6 +1960,116 @@ bool MainWindow::preloadROMs(QString filename, QString gbafilename)
         }
 
         gbaloaded = true;
+    }
+
+
+	FILE* f;
+    f = fopen(filename.toStdString().c_str(), "rb");
+    if (f)
+    {
+		u32 titleid[2];
+		fseek(f, 0x230, SEEK_SET);
+		fread(titleid, 8, 1, f);
+		fclose(f);
+		if (titleid[1] == 0x00030004)
+		{
+			QString tmdfile = filename + ".tmd";
+		
+			f = fopen(tmdfile.toStdString().c_str(), "rb");
+			if (f)
+			{			
+				u8 newTmdData[0x208];
+				fread(newTmdData, 0x208, 1, f);
+				fclose(f);
+
+				u32 tmdtitleid[2];
+				tmdtitleid[0] = (newTmdData[0x18C] << 24) | (newTmdData[0x18D] << 16) | (newTmdData[0x18E] << 8) | newTmdData[0x18F];
+				tmdtitleid[1] = (newTmdData[0x190] << 24) | (newTmdData[0x191] << 16) | (newTmdData[0x192] << 8) | newTmdData[0x193];
+
+				if (tmdtitleid[1] == titleid[0] && tmdtitleid[0] == titleid[1])
+				{
+
+					FILE* bios7i = Platform::OpenLocalFile(Config::DSiBIOS7Path, "rb");
+					if (!bios7i)
+						return false;
+
+					u8 es_keyY[16];
+					fseek(bios7i, 0x8308, SEEK_SET);
+					fread(es_keyY, 16, 1, bios7i);
+					fclose(bios7i);
+
+					FILE* curNAND = Platform::OpenLocalFile(Config::DSiNANDPath, "r+b");
+					if (!curNAND)
+						return false;
+
+					if (!DSi_NAND::Init(curNAND, es_keyY))
+					{
+						fclose(curNAND);
+						curNAND = nullptr;
+						return false;
+					}					
+					
+					if (DSi_NAND::TitleExists(titleid[1], titleid[0]))
+					{
+						QMessageBox::critical(this,
+											  "Import title - melonDS",
+											  "This DSiWare title is already installed !");
+						return false;
+					}
+					else{
+						// remove anything that might hinder the install
+						DSi_NAND::DeleteTitle(titleid[0], titleid[1]);
+
+						bool importres = DSi_NAND::ImportTitle(filename.toStdString().c_str(), newTmdData, false);
+						if (!importres)
+						{
+							// remove a potential half-completed install
+							DSi_NAND::DeleteTitle(titleid[0], titleid[1]);
+
+							QMessageBox::critical(this,
+												  "Import title - melonDS",
+												  "An error occured while installing the title to the NAND.\nCheck that your NAND dump is valid.");
+						}
+						else
+						{
+								QMessageBox::critical(this,
+														  "Import title - melonDS",
+														  "SUCESS !");	
+								return false;
+						}						
+						
+						
+					}
+					
+					QMessageBox::critical(this,
+											  "Import title - melonDS",
+											  "DONE");	
+					return false;
+				}
+				else
+				{
+					
+					QMessageBox::critical(this,
+										  "Import title - melonDS",
+										  "Title ID in metadata file does NOT match executable file.");
+					return false;					
+				}
+			}
+			else
+			{
+				
+				QMessageBox::critical(this,
+									  "Import title - melonDS",
+									  "No TMD File.");
+				return false;					
+			}			
+			
+			
+			QMessageBox::critical(this,
+								  "Success",
+								  "Executable file is not a DSiWare title.");
+			return false;
+		}		
     }
 
     QStringList file = filename.split('|');
