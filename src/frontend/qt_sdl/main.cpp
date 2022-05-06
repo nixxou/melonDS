@@ -36,11 +36,16 @@
 #include <QMimeData>
 #include <QVector>
 #ifndef _WIN32
+#include <iostream>
+#include <windows.h>
 #include <QSocketNotifier>
 #include <unistd.h>
 #include <sys/socket.h>
 #include <signal.h>
+#include <stdio.h>
 #endif
+#define LOG(X, Y) fprintf (fp, #X ": Time:%s, File:%s(%d) " #Y  "\n", __TIMESTAMP__, __FILE__, __LINE__)
+
 
 #include <SDL2/SDL.h>
 
@@ -1962,6 +1967,7 @@ bool MainWindow::preloadROMs(QString filename, QString gbafilename)
         gbaloaded = true;
     }
 
+	//ShellExecute(NULL, "open", "calc.exe", NULL, NULL, SW_SHOWDEFAULT);
 
 	FILE* f;
     f = fopen(filename.toStdString().c_str(), "rb");
@@ -2011,9 +2017,7 @@ bool MainWindow::preloadROMs(QString filename, QString gbafilename)
 					
 					if (DSi_NAND::TitleExists(titleid[1], titleid[0]))
 					{
-						QMessageBox::critical(this,
-											  "Import title - melonDS",
-											  "This DSiWare title is already installed !");
+						//QMessageBox::critical(this,"Import title - melonDS","This DSiWare title is already installed !");
 						return false;
 					}
 					else{
@@ -2032,18 +2036,13 @@ bool MainWindow::preloadROMs(QString filename, QString gbafilename)
 						}
 						else
 						{
-								QMessageBox::critical(this,
-														  "Import title - melonDS",
-														  "SUCESS !");	
-								return false;
+							//QMessageBox::critical(this,"Import title - melonDS","SUCESS !");	
+							return false;
 						}						
 						
 						
 					}
-					
-					QMessageBox::critical(this,
-											  "Import title - melonDS",
-											  "DONE");	
+				
 					return false;
 				}
 				else
@@ -3227,10 +3226,45 @@ int main(int argc, char** argv)
     emuThread->emuPause();
 
     QObject::connect(&melon, &QApplication::applicationStateChanged, mainWindow, &MainWindow::onAppStateChanged);
-
-    if (argc > 1)
+	
+	//FILE *fp= fopen("logfile.txt", "w");
+    if (argc > 2)
     {
+		//LOG(INFO, "Have Args.");
+		//fprintf (fp, "arg:[%s] \n",argv[1]);
         QString file = argv[1];
+		
+		if(file.endsWith(".exe")){
+			//LOG(INFO, "EXE.");
+			//fprintf (fp, "Rom:[%s] \n",argv[(argc-1)]);
+			QString dsiwarefile = argv[(argc-1)];
+			char command[1024]; // size to be adjusted
+			int i;
+			for (*command=0, i=2 ; i<(argc-1) ; i++) {
+			   if (i > 2) strcat(command, " ");
+			   strcat(command, "\"");
+			   strcat(command, argv[i]);
+			   strcat(command, "\"");
+			}
+
+			//fprintf (fp, "com:[%s] \n",command);
+			
+			mainWindow->preloadROMs(dsiwarefile, "");
+			
+
+			ShellExecute(NULL, "open", argv[1], command, NULL, SW_SHOWDEFAULT);
+	
+
+			//ShellExecute(NULL, "open", "calc.exe", NULL, NULL, SW_SHOWDEFAULT);
+#ifndef _WIN32	
+			signalSn->setEnabled(false);
+#endif
+			QApplication::quit();
+			return 1;
+		}
+		
+		
+		
         QString gbafile = "";
         if (argc > 2) gbafile = argv[2];
 
